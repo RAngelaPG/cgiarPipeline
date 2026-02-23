@@ -55,7 +55,7 @@ metASREML <- function(phenoDTfile = NULL,
     }
   }
   if (is.null(traitFamily)) {
-    traitFamily <- rep("asr_gaussian(link = 'identity', dispersion = 1.0)", length(trait))
+    traitFamily <- rep("asreml::asr_gaussian(link = 'identity', dispersion = 1.0)", length(trait))
   }
   if (length(traitFamily) != length(trait)) {
     stop("Trait distributions should have the same length than traits to be analyzed.",
@@ -1333,5 +1333,6 @@ metASREML <- function(phenoDTfile = NULL,
   
   return(phenoDTfile)
 }
+
 
 
