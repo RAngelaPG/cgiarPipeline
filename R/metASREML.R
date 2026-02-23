@@ -604,14 +604,14 @@ metASREML <- function(phenoDTfile = NULL,
     }
     
     family_arg <- eval(parse(text = traitFamily[iTrait]))
-    
+    action_na<-eval(parse(text = "asreml::na.method(x=c('include'), y=c('include'))"))
     # Adjust model with asreml
     tryCatch({
       mix<<-asreml::asreml(
         fixed = fixed_formula,
         random = random_formula,
         data = mydataSub,
-        na.action = na.method(x='include', y='include'),
+        na.action = action_na,
         maxit = maxIters,
         weights = w,
         family = family_arg,	
@@ -1333,6 +1333,7 @@ metASREML <- function(phenoDTfile = NULL,
   
   return(phenoDTfile)
 }
+
 
 
 
