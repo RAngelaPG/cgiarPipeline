@@ -1,7 +1,6 @@
 metASREML <- function(phenoDTfile = NULL,
                       analysisId = NULL,
-                      analysisIdgeno = NULL,
-                      #gsca = FALSE,
+                      analysisIdgeno = NULL,                      
                       fixedTerm = NULL,
                       randomTerm = NULL,
                       covMod = NULL,
@@ -151,7 +150,7 @@ metASREML <- function(phenoDTfile = NULL,
   covars<-unlist(covMod)
   randomTermForCovars<-randomTermForCovars[[1]]
   fixedTermForCovars <- setdiff(unique(unlist(fixedTerm)), c("environment", "designation"))
-  G=D=N=Gad=WI=NULL
+   G=Gd=N=Gad=WI=Gm=Gf=NULL
   
   if (any(covkernel %in% covars)) {
     #New structure Geno info
@@ -592,10 +591,7 @@ metASREML <- function(phenoDTfile = NULL,
     if (length(tranfactrandom) != 0) {
       mydataSub[, unique(unlist(randomTerm))[tranfactrandom]] = lapply(mydataSub[unique(unlist(randomTerm))[tranfactrandom]], as.factor)
     }
-    
-    #asreml::asreml.options(workspace = 300e7,pworkspace = 200e7,trace = T,ai.sing = T)
-    asreml::asreml.options(trace = T,ai.sing = T)
-    
+       
     fixed_formula <- tryCatch(as.formula(fixedTermSub), error = function(e) return(NULL))
     random_formula <- tryCatch(as.formula(randomTermSub), error = function(e) return(NULL))
     
@@ -604,28 +600,27 @@ metASREML <- function(phenoDTfile = NULL,
     }
     
     family_arg <- eval(parse(text = traitFamily[iTrait]))
-    action_na<-eval(parse(text = "asreml::na.method(x=c('include'), y=c('include'))"))
+    action_na<-asreml::na.method(x=c('include'), y=c('include'))
     # Adjust model with asreml
-    tryCatch({
-      mix<<-asreml::asreml(
-        fixed = fixed_formula,
-        random = random_formula,
-        data = mydataSub,
-        na.action = action_na,
-        maxit = maxIters,
-        weights = w,
-        family = family_arg,	
-        envir = .GlobalEnv
-      )
-    }, 
-      error = function(e) {
-        message("❌ Error to adjust model:", e$message)
-      }
-      #warning = function(w) {
-      #  message("Warning: ", w$message)
-      #}
-    )
-  
+    mix <- tryCatch({
+			asreml::asreml.options(workspace = 300e7,pworkspace = 300e7,trace = F,ai.sing = T)
+            model=asreml::asreml(
+              fixed   = fixed_formula,
+              random  = random_formula,
+              data    = mydataSub,
+              na.action = action_na,
+              maxit   = maxIters,
+              weights = w,
+              family  = family_arg,
+              envir = .GlobalEnv
+            )
+            return(list(model = model, error = NULL))
+          }, error = function(e) {
+            return(list(model = NULL,error = paste("ASREML ERROR:", e$message)))            
+          })
+    
+    errorMSN<-mix$error
+    mix<-mix$model
   
     update_until_converged <- function(model, max_updates = 10, verbose = TRUE) {
       count <- 0
@@ -647,12 +642,12 @@ metASREML <- function(phenoDTfile = NULL,
       return(model)
     }
 
-    if (!inherits(mix, "try-error")) {
+    if (!is.null(mix)) {
       mix <<- update_until_converged(mix, max_updates = 10)
     }
     
     pp <- list()
-    if (!inherits(mix, "try-error")) {
+    if (!is.null(mix)) {
     # get variance components
     ss <- summary(mix)$varcomp
     Ve <- ss["units!R", "component"]
@@ -866,8 +861,11 @@ metASREML <- function(phenoDTfile = NULL,
     if (length(groupingSub)!=0){
     for (iGroup in groupingSub) {
       #for( iGroup in names(groupingSub)){ # iGroup=groupingSub[4]
-      
-      blup = predict(mix, classify = iGroup)$pvals
+      predpv<-asreml::predict.asreml(mix, classify = iGroup)
+      blup = predpv$pvals
+      avsedblup=predpv$avsed
+      rm(predpv)
+      gc()
       if (all(blup$status == "Aliased")) {
         statusmetrics = "Aliased estimation, problems with the model, please check!"
         stdError <- reliability <- rep(NA, dim(blup)[1])
@@ -879,7 +877,7 @@ metASREML <- function(phenoDTfile = NULL,
         stdError <- blup$std.error # random effect was just one column
         if (iGroup %in% subgroupGen) {Vg <- var(blup$predicted.value) + ((stdError^2)/length(stdError))} else {Vg<-NA}
         reliability <- abs((Vg - (stdError^2)) / Vg) # reliability <- abs((Vg - Matrix::diag(pev))/Vg)
-        lsdt <- qt(1 - 0.05 / 2, round(mix$nedf)) * predict(mix, classify =iGroup)$avsed
+        lsdt <- qt(1 - 0.05 / 2, round(mix$nedf)) * avsedblup
       }
       
       badRels <- which(reliability > 1)
@@ -1327,12 +1325,11 @@ metASREML <- function(phenoDTfile = NULL,
   )
   
   phenoDTfile$modeling <- rbind(phenoDTfile$modeling, modeling[, colnames(phenoDTfile$modeling)])
-  message("Wrapping the results.")
-  
-  #save(phenoDTfile, file = "asrResult1.RData")
-  
-  return(phenoDTfile)
+  message("Wrapping the results.")  
+  #save(phenoDTfile, file = "asrResult1.RData") 
+ return(list(phenoDTfile,errorMSN))
 }
+
 
 
 
